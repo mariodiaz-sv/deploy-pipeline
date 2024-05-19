@@ -1,0 +1,57 @@
+stages:
+  - build
+  - test
+  - docker-build
+  - push
+  - deploy
+
+build:
+  stage: build
+  image: node
+  script: 
+    - echo "Start building App"
+    - npm install
+    - npm run build
+    - echo "Build successfully!"
+
+test:
+  stage: test
+  image: node
+  script:
+    - echo "Testing App"
+    - npm install
+    - CI=true npm test
+    - echo "Test successfully!"
+
+docker-build:
+  stage: docker-build
+  image: docker:latest
+  services: 
+    - name: docker:19.03.8-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - docker build --pull -t "$CI_REGISTRY_IMAGE" .
+    - docker push "$CI_REGISTRY_IMAGE"
+
+push_to_heroku:
+  image: docker:latest
+  stage: push
+  services:
+  - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - docker pull "$CI_REGISTRY_IMAGE"
+    - docker login -u _ -p $HEROKU_API_KEY registry.heroku.com
+    - docker tag "$CI_REGISTRY_IMAGE" registry.heroku.com/ci-cd-app-test/web
+    - docker push registry.heroku.com/ci-cd-app-test/web
+
+deploy_to_heroku:
+  image: node:latest
+  stage: deploy
+  services:
+  - docker:dind
+  script:
+    - npm install -g heroku
+    - heroku container:release web --app ci-cd-app-test
